@@ -1,0 +1,6 @@
+# depslib dependency file v1.0
+1588621884 source:/home/martin/Desktop/SPRProject/main.c
+	<stdio.h>
+	<stdlib.h>
+	<sys/mman.h>
+
