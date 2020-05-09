@@ -22,7 +22,7 @@ typedef struct nodePerson {
 void loadPersonsFromFile(char fileName[],sNodePerson **head);
 void addPersonToTree(sPerson person,sNodePerson **head);
 void addSomeonesChild(char parentName[], sPerson child,sNodePerson **head);
-void killPerson(char name[],sNodePerson* head);
+void killPerson(char name[],sNodePerson** head);
 sNodePerson* findPerson(char name[],sNodePerson* head);
 void* create_shared_memory(size_t size);
 
@@ -107,8 +107,6 @@ void *serve(sNodePerson **head){
     while(1){
         sem_wait(&sem);
         if(strlen((char*)shmem) != 0){
-            printf("Shmem %s\n",shmem);
-
             char *requestCode;
             requestCode = strtok(shmem," ");
             switch(requestCode[0]){
@@ -122,7 +120,7 @@ void *serve(sNodePerson **head){
                     childName = requestCode;
                     sPerson child;
                     strcpy(child.name,childName);
-                    addSomeonesChild(parentName,child,head);f
+                    addSomeonesChild(parentName,child,head);
                     break;
                 }
                 case '2':
@@ -185,22 +183,7 @@ void printTree(sNodePerson **head){
     }
     printTree(&(*head)->rightChild);
 }
-/*
-void writePersonsToFile(char filename[], sPerson persons[], int size){
-     FILE *fp = fopen(filename,"w+");
-     if(!fp){
-        printf("Could not open file %s\n",filename);
-    }
-    for(int i=0;i<size;i++){
-        if(fwrite(&persons[i],sizeof(sPerson),1,fp)!=1)
-        {
-            printf("Error: Code 4\n");
-            return ;
-        }
-    }
-    fclose(fp);
-}
-*/
+
 void loadPersonsFromFile(char filename[],sNodePerson **head){
     FILE *fp = fopen(filename,"rb");
     if(!fp){
@@ -244,9 +227,8 @@ void addSomeonesChild(char parentName[], sPerson child,sNodePerson **head){
     printTree(head);
 }
 
-void killPerson(char name[],sNodePerson *head){
-    printf("Killing %s\n",name);
-    sNodePerson* foundPerson = findPerson(name,head);
+void killPerson(char name[],sNodePerson **head){
+    sNodePerson* foundPerson = findPerson(name,*head);
     if(foundPerson == NULL){
         printf("Could not find person because they do not exist\n");
     }
@@ -254,7 +236,6 @@ void killPerson(char name[],sNodePerson *head){
 }
 
 sNodePerson* findPerson(char name[],sNodePerson* head){
-    printf("Namerih go");
     if(head == NULL){
         return head;
     } else {
