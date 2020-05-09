@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <semaphore.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <string.h>
 #define NAME_MAX_LENGTH 100
 #define ADD_REQUEST_CODE 1
 #define KILL_REQUEST_CODE 2
@@ -27,89 +29,47 @@ void* create_shared_memory(size_t size);
 /* void writePersonsToFile(char filename[], sPerson persons[], int size); */
 void printTree(sNodePerson **head);
 
-void listen(sNodePerson **head,void *shmem);
-void serve(sNodePerson **head,void *shmem);
+void *listen(sNodePerson **head);
+void *serve(sNodePerson **head);
 
-void getInputAndRequestAddingSomeonesChild(sNodePerson **head,void *shmem);
-void getInputAndRequestKillingSomeone(sNodePerson **head,void *shmem);
+void getInputAndRequestAddingSomeonesChild(sNodePerson **head);
+void getInputAndRequestKillingSomeone(sNodePerson **head);
+
+sem_t sem;
+void *shmem;
 int main()
 {
     // add memset
-    sNodePerson *head;
-    head=NULL;
-    loadPersonsFromFile("data.bin",&head);
-    void* shmem = create_shared_memory(1024); // for two names and a number with a space character
-    listen(&head,shmem);
+    pthread_t listener;
+    pthread_t server;
+
+    if (sem_init(&sem, 0, 1))
+    {
+        perror("sem_init_failed!");
+    } else {
+        sNodePerson *head;
+        head=NULL;
+        loadPersonsFromFile("data.bin",&head);
+        shmem = create_shared_memory(4096);
+
+        pthread_create(&listener, NULL, listen, &head);
+        pthread_create(&server, NULL, serve, &head);
+
+        pthread_join(server, NULL);
+        pthread_join(listener, NULL);
+
+        sem_destroy(&sem);
+        pthread_exit(NULL);
+    }
     return 0;
 }
 
-void serve(sNodePerson **head,void *shmem){
-
-    while(1){
-
-        if(strlen((char*)shmem) != 0){
-            char *requestCode;
-            requestCode = strtok(shmem," ");
-            switch(requestCode[0]){
-                case '1' :
-                {
-                    char * parentName;
-                    parentName = strtok(shmem," ");
-                    char * childName;
-                    childName = strtok(shmem," ");
-                    sPerson child;
-                    strcpy(child.name,childName);
-                    addSomeonesChild(parentName,child,head);
-                    break;
-                }
-                case '2':
-                {
-                    killPerson(strtok(shmem," "),head);
-                    printTree(head);
-                    break;
-                }
-                default:
-                {
-                    printf("Some garbage is written in the shmem");
-                    exit(3);
-                    break;
-                }
-            }
-        }
-
-    }
-
-}
-
-void getInputAndRequestKillingSomeone(sNodePerson **head,void *shmem){
-    char name[NAME_MAX_LENGTH];
-    printf("Insert the name of the one you want to kill down below:\n");
-    scanf("%s",name);
-    char buffer[SHMEM_SIZE];
-    char choice[] = {"2"};
-    snprintf(buffer,sizeof(buffer),"%s %s",choice,name);
-    memcpy(shmem,buffer,sizeof(buffer));
-}
-
-void getInputAndRequestAddingSomeonesChild(sNodePerson **head,void *shmem){
-    char parentName[NAME_MAX_LENGTH];
-    printf("Insert the name of the parent here:\n");
-    scanf("%s",parentName);
-    char childName[NAME_MAX_LENGTH];
-    printf("Insert the name of the child here:\n");
-    scanf("%s",childName);
-    char buffer[202];
-    char choice[] = {"1"};
-    sprintf(buffer,"%s %s %s",choice,parentName,childName);
-    printf("%s\n",buffer);
-    memcpy(shmem,buffer,sizeof(buffer));
-}
-
-void listen(sNodePerson **head,void *shmem){
+void *listen(sNodePerson **head){
     printf("Hi. This is your family application. When you started this application a tree with some folks was loaded.\n");
     printf("You can add child to already existing person and you can kill whoever you like.The choice is yours.\n");
     printf("*************************************\n\n");
     while(1){
+        sem_wait(&sem);
         printf("0.Show all people\n");
         printf("1.Add someone's child\n");
         printf("2.Kill someone\n");
@@ -124,10 +84,10 @@ void listen(sNodePerson **head,void *shmem){
                 printTree(head);
                 break;
             case 1:
-                getInputAndRequestAddingSomeonesChild(head,shmem);
+                getInputAndRequestAddingSomeonesChild(head);
                 break;
             case 2:
-                getInputAndRequestKillingSomeone(head,shmem);
+                getInputAndRequestKillingSomeone(head);
                 break;
             case 3:
                 exit(0);
@@ -135,9 +95,78 @@ void listen(sNodePerson **head,void *shmem){
             default:
                 printf("Wrong input.Exiting now.");
                 exit(-2);
-
         }
+        sem_post(&sem); // V(S)
+        sleep(3);
+
     }
+}
+
+void *serve(sNodePerson **head){
+
+    while(1){
+        sem_wait(&sem);
+        if(strlen((char*)shmem) != 0){
+            printf("Shmem %s\n",shmem);
+
+            char *requestCode;
+            requestCode = strtok(shmem," ");
+            switch(requestCode[0]){
+                case '1' :
+                {
+                    char * parentName;
+                    requestCode = strtok(NULL," ");
+                    parentName = requestCode;
+                    char * childName;
+                    requestCode = strtok(NULL," ");
+                    childName = requestCode;
+                    sPerson child;
+                    strcpy(child.name,childName);
+                    addSomeonesChild(parentName,child,head);f
+                    break;
+                }
+                case '2':
+                {
+                    requestCode = strtok(NULL," ");
+                    killPerson(requestCode,head);
+                    break;
+                }
+                default:
+                {
+                    printf("Some garbage is written in the shmem");
+                    exit(3);
+                    break;
+                }
+            }
+        }
+        memset(shmem, '\0', 4096);
+        sem_post(&sem); // V(S)
+        sched_yield();
+    }
+
+}
+
+void getInputAndRequestKillingSomeone(sNodePerson **head){
+    char name[NAME_MAX_LENGTH];
+    printf("Insert the name of the one you want to kill down below:\n");
+    scanf("%s",name);
+    char buffer[SHMEM_SIZE];
+    char choice[] = {"2"};
+    snprintf(buffer,sizeof(buffer),"%s %s",choice,name);
+    memcpy(shmem,buffer,sizeof(buffer));
+}
+
+void getInputAndRequestAddingSomeonesChild(sNodePerson **head){
+    char parentName[NAME_MAX_LENGTH];
+    printf("Insert the name of the parent here:\n");
+    scanf("%s",parentName);
+    char childName[NAME_MAX_LENGTH];
+    printf("Insert the name of the child here:\n");
+    scanf("%s",childName);
+    char buffer[202];
+    char choice[] = {"1"};
+    sprintf(buffer,"%s %s %s",choice,parentName,childName);
+    memcpy(shmem,buffer,sizeof(buffer));
 }
 
 void* create_shared_memory(size_t size) {
@@ -216,15 +245,16 @@ void addSomeonesChild(char parentName[], sPerson child,sNodePerson **head){
 }
 
 void killPerson(char name[],sNodePerson *head){
+    printf("Killing %s\n",name);
     sNodePerson* foundPerson = findPerson(name,head);
     if(foundPerson == NULL){
         printf("Could not find person because they do not exist\n");
     }
     strcpy(foundPerson->person.name,"X\0");
-    printTree(&head);
 }
 
 sNodePerson* findPerson(char name[],sNodePerson* head){
+    printf("Namerih go");
     if(head == NULL){
         return head;
     } else {
