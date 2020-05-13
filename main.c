@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <semaphore.h>
 #include <sys/mman.h>
@@ -111,7 +112,7 @@ void *serve(sNodePerson **head)
         if(strlen((char*)shmem) != 0){
             char *request;
             request = strtok(shmem," ");
-            switch(requestCode[0]){
+            switch(request[0]){
                 case '1' :
                 {
                     char * parentName;
@@ -129,6 +130,9 @@ void *serve(sNodePerson **head)
                 {
                     request = strtok(NULL," ");
                     killPerson(request,head);
+                    printf("********* Tree looks like this now ***********\n");
+                    printTree(head);
+                    printf("**********************************************\n");
                     break;
                 }
                 default:
@@ -231,7 +235,9 @@ void addSomeonesChild(char parentName[], sPerson child,sNodePerson **head)
        printf("Could not find person because they do not exist\n");
     }
     addPersonToTree(child,&foundPerson);
+    printf("********* Tree looks like this now ***********\n");
     printTree(head);
+    printf("**********************************************\n");
 }
 
 void killPerson(char name[],sNodePerson **head)
