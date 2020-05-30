@@ -37,6 +37,8 @@ void *serve(sNodePerson **head);
 void getInputAndRequestAddingSomeonesChild(sNodePerson **head);
 void getInputAndRequestKillingSomeone(sNodePerson **head);
 
+void writeRandomDataToFile(char fileName[]);
+
 sem_t sem;
 void *shmem;
 int main()
@@ -50,6 +52,7 @@ int main()
     } else {
         sNodePerson *head;
         head=NULL;
+        // writeRandomDataToFile("data.bin");
         loadPersonsFromFile("data.bin",&head);
         shmem = create_shared_memory(SHMEM_SIZE);
 
@@ -63,6 +66,28 @@ int main()
         pthread_exit(NULL);
     }
     return 0;
+}
+
+void writeRandomDataToFile(char fileName[]){
+    int fd = open(fileName,O_CREAT | O_WRONLY);
+    if(fd < 0) {
+        printf("Couldnt open file");
+    }
+    chmod(fileName,S_IRUSR | S_IWUSR);
+    sPerson p1;
+    strcpy(p1.name,"Max");
+    sPerson p2;
+    strcpy(p2.name,"Dustin");
+    sPerson p3;
+    strcpy(p3.name,"Tony");
+    int result = 0;
+    result += write(fd, &p1, sizeof(p1));
+    result += write(fd, &p2, sizeof(p2));
+    result += write(fd, &p3, sizeof(p3));
+    printf("%d\n", result);
+    if(close(fd) != 0){
+        printf("Couldnt close file %s\n", fileName);
+    }
 }
 
 void *listen(sNodePerson **head)
@@ -194,19 +219,26 @@ void printTree(sNodePerson **head)
 
 void loadPersonsFromFile(char filename[],sNodePerson **head)
 {
-    FILE *fp = fopen(filename,"rb");
-    if(!fp){
+    int fd = open(filename,O_RDWR);
+    if(fd < 0){
         printf("Could not open file %s\n",filename);
     }
+    int totalRead = 0;
+    lseek(fd,0,SEEK_SET);
     while(1){
         sPerson person;
-
-        if(fread(&person,sizeof(sPerson),1,fp)!= 1){
+        char buffer[100];
+        if(read(fd,buffer,sizeof(buffer)) == sizeof(buffer))
+        {
+            strcpy(person.name,buffer);
+            addPersonToTree(person,head);
+        } else {
             break;
         }
-        addPersonToTree(person,head);
     }
-    fclose(fp);
+    if(close(fd) != 0){
+        printf("Couldnt close file %s\n", filename);
+    }
 }
 
 void addPersonToTree(sPerson person,sNodePerson **head)
